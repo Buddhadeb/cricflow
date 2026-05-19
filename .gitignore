@@ -1,0 +1,60 @@
+# ── Secrets — NEVER commit ────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Alembic ───────────────────────────────────────────────
+# Keep migrations, ignore only runtime cache
+alembic/__pycache__/
+
+# ── Node / Frontend ───────────────────────────────────────
+node_modules/
+tournament-frontend/dist/
+tournament-frontend/.vite/
+*.local
+
+# ── Docker ────────────────────────────────────────────────
+# Ignore locally built images metadata (not compose files)
+.docker/
+
+# ── Uploaded media files ──────────────────────────────────
+tournament-backend/media/
+media/
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# ── IDE ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.iml
+
+# ── Logs ──────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Misc ──────────────────────────────────────────────────
+*.docx
+tournament_app_spec.docx
