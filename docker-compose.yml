@@ -1,0 +1,75 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cricflow_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ind@8888
+      POSTGRES_DB: tournament_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: cricflow_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./tournament-backend
+      dockerfile: Dockerfile
+    container_name: cricflow_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:ind%408888@db:5432/tournament_db
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-super-secret-jwt-key-min-32-chars-change-this
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      RAZORPAY_KEY_ID: rzp_test_Sq6oYkdG98WydC
+      RAZORPAY_KEY_SECRET: rQKAeVbBaqDPpA3IajUx5ofA
+      REGISTRATION_FEE: 150
+      CLOUDINARY_CLOUD_NAME: your_cloud_name
+      CLOUDINARY_API_KEY: your_api_key
+      CLOUDINARY_API_SECRET: your_api_secret
+      ENVIRONMENT: production
+      ALLOWED_ORIGINS: http://localhost,http://localhost:80,http://cricflow.online,https://cricflow.online
+      PAYMENT_MOCK: "false"
+      GOOGLE_CLIENT_ID: 362563649471-nlh4ujfph12ja8v7i9r16l292efbcrr2.apps.googleusercontent.com
+    volumes:
+      - media_files:/app/media
+
+  frontend:
+    build:
+      context: ./tournament-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ""
+        VITE_RAZORPAY_KEY_ID: rzp_test_Sq6oYkdG98WydC
+        VITE_GOOGLE_CLIENT_ID: 362563649471-nlh4ujfph12ja8v7i9r16l292efbcrr2.apps.googleusercontent.com
+    container_name: cricflow_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:
+  media_files:
