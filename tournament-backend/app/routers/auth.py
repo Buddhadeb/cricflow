@@ -95,7 +95,7 @@ async def google_auth(request: Request, body: GoogleAuthInput, db: AsyncSession 
                 password_hash=None,
                 google_id=google_sub,
                 avatar_url=google_avatar,
-                role="user",
+                role="player",
                 is_active=True,
             )
             db.add(user)
