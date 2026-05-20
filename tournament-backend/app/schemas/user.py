@@ -9,7 +9,7 @@ class UserCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: Optional[Literal["admin", "user"]] = "user"
+    role: Optional[Literal["player", "team_owner", "scorer", "admin"]] = "player"
 
     @field_validator("name")
     @classmethod
