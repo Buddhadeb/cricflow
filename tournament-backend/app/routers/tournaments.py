@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.match import MatchResponse
 from app.schemas.player import PlayerResponse
 from app.schemas.tournament import TournamentCreate, TournamentResponse, TournamentUpdate
+from app.utils.upload import upload_player_photo
 
 
 class TournamentTeamCreate(BaseModel):
@@ -200,7 +201,18 @@ async def list_tournament_players(
 @router.post("/{tournament_id}/players/manual", response_model=PlayerResponse, status_code=201)
 async def add_player_manually(
     tournament_id: uuid.UUID,
-    body: ManualPlayerCreate,
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    age: int = Form(...),
+    address: str = Form(...),
+    player_type: str = Form(...),
+    tshirt_size: str = Form("M"),
+    dob: Optional[str] = Form(None),
+    ps: Optional[str] = Form(None),
+    phone: Optional[str] = Form(None),
+    jersey_number: Optional[int] = Form(None),
+    base_price: Optional[Decimal] = Form(None),
+    photo: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -211,27 +223,44 @@ async def add_player_manually(
     if tournament.organizer_id != current_user.id and current_user.role != "admin":
         raise HTTPException(403, "Only the tournament organizer can add players manually")
 
-    name = body.name.strip()
+    name = f"{first_name.strip()} {last_name.strip()}".strip()
     if len(name) < 2:
         raise HTTPException(400, "Name must be at least 2 characters")
-    if not (15 <= body.age <= 60):
+    if not (15 <= age <= 60):
         raise HTTPException(400, "Age must be between 15 and 60")
+    if player_type not in {"batsman", "bowler", "all_rounder", "wicket_keeper"}:
+        raise HTTPException(400, "Invalid player_type")
 
-    base = body.base_price or tournament.player_base_price or Decimal("1000.00")
+    full_address = ", ".join(filter(None, [address.strip(), f"P.S. {ps.strip()}" if ps else None]))
+
+    parsed_dob = None
+    if dob:
+        try:
+            from datetime import date as date_type
+            parsed_dob = date_type.fromisoformat(dob)
+        except ValueError:
+            pass
+
+    photo_url = None
+    if photo and photo.filename:
+        photo_url = await upload_player_photo(photo)
+
+    effective_base = base_price or tournament.player_base_price or Decimal("1000.00")
 
     player = Player(
         id=uuid.uuid4(),
         user_id=None,
         tournament_id=tournament_id,
         name=name,
-        age=body.age,
-        dob=body.dob,
-        address=body.address.strip(),
-        phone=body.phone,
-        player_type=body.player_type,
-        tshirt_size=body.tshirt_size,
-        jersey_number=body.jersey_number,
-        base_price=base,
+        age=age,
+        dob=parsed_dob,
+        address=full_address,
+        phone=phone or None,
+        player_type=player_type,
+        tshirt_size=tshirt_size,
+        jersey_number=jersey_number,
+        base_price=effective_base,
+        photo_url=photo_url,
         status="available",
         is_approved=True,
     )

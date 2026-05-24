@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -209,6 +209,10 @@ const PLAYER_TYPES_MANUAL = [
 
 function ManualPlayerForm({ tournament, onSuccess }) {
   const qc = useQueryClient();
+  const photoRef = useRef(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm({
     defaultValues: { player_type: 'batsman', tshirt_size: 'M' },
   });
@@ -217,30 +221,71 @@ function ManualPlayerForm({ tournament, onSuccess }) {
 
   const mutation = useMutation({
     mutationFn: (data) => {
-      const payload = {
-        name: `${data.first_name.trim()} ${data.last_name.trim()}`,
-        age: Number(data.age),
-        dob: data.dob || null,
-        address: [data.address, data.ps ? `P.S. ${data.ps}` : ''].filter(Boolean).join(', '),
-        phone: data.phone || null,
-        player_type: data.player_type,
-        tshirt_size: data.tshirt_size,
-        jersey_number: data.jersey_number ? Number(data.jersey_number) : null,
-        base_price: data.base_price ? Number(data.base_price) : null,
-      };
-      return addPlayerManually(tournament.id, payload);
+      const fd = new FormData();
+      fd.append('first_name', data.first_name.trim());
+      fd.append('last_name', data.last_name.trim());
+      fd.append('age', data.age);
+      fd.append('address', data.address.trim());
+      fd.append('player_type', data.player_type);
+      fd.append('tshirt_size', data.tshirt_size);
+      if (data.dob) fd.append('dob', data.dob);
+      if (data.ps) fd.append('ps', data.ps.trim());
+      if (data.phone) fd.append('phone', data.phone.trim());
+      if (data.jersey_number) fd.append('jersey_number', data.jersey_number);
+      if (data.base_price) fd.append('base_price', data.base_price);
+      if (photoFile) fd.append('photo', photoFile);
+      return addPlayerManually(tournament.id, fd);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tournament-players', tournament.id] });
       reset({ player_type: 'batsman', tshirt_size: 'M' });
+      setPhotoPreview(null);
+      setPhotoFile(null);
       onSuccess();
     },
   });
+
+  const handlePhoto = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setPhotoFile(f);
+    setPhotoPreview(URL.createObjectURL(f));
+  };
 
   const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400';
 
   return (
     <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
+
+      {/* Photo upload */}
+      <div className="flex items-center gap-4">
+        <div
+          onClick={() => photoRef.current?.click()}
+          className="w-20 h-24 rounded-xl border-2 border-dashed border-gray-200 hover:border-amber-400 cursor-pointer flex items-center justify-center overflow-hidden transition-colors shrink-0 bg-gray-50"
+        >
+          {photoPreview ? (
+            <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+          ) : (
+            <div className="text-center">
+              <svg className="w-6 h-6 text-gray-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <p className="text-xs text-gray-400 mt-1">Photo</p>
+            </div>
+          )}
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-600 mb-1">Player Photo</p>
+          <p className="text-xs text-gray-400 mb-2">Passport size photo from the form (optional)</p>
+          <button type="button" onClick={() => photoRef.current?.click()}
+            className="px-3 py-1.5 border border-gray-200 text-xs font-semibold text-gray-600 rounded-lg hover:border-amber-400 hover:text-amber-600 transition-colors">
+            {photoPreview ? 'Change Photo' : 'Upload Photo'}
+          </button>
+        </div>
+        <input ref={photoRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={handlePhoto} />
+      </div>
+
       {/* Name row */}
       <div className="grid grid-cols-2 gap-3">
         <Field label="First Name" error={errors.first_name?.message}>
@@ -279,16 +324,8 @@ function ManualPlayerForm({ tournament, onSuccess }) {
         <label className="block text-xs font-semibold text-gray-600 mb-2">Playing Role</label>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {PLAYER_TYPES_MANUAL.map((pt) => (
-            <button
-              key={pt.value}
-              type="button"
-              onClick={() => setValue('player_type', pt.value)}
-              className={`p-3 rounded-xl border-2 text-left transition-all ${
-                selectedType === pt.value
-                  ? 'border-amber-400 bg-amber-50'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
+            <button key={pt.value} type="button" onClick={() => setValue('player_type', pt.value)}
+              className={`p-3 rounded-xl border-2 text-left transition-all ${selectedType === pt.value ? 'border-amber-400 bg-amber-50' : 'border-gray-200 hover:border-gray-300'}`}>
               <p className={`text-sm font-bold ${selectedType === pt.value ? 'text-amber-700' : 'text-gray-700'}`}>{pt.label}</p>
               <p className="text-xs text-gray-400 mt-0.5 leading-tight">{pt.detail}</p>
             </button>
@@ -301,16 +338,8 @@ function ManualPlayerForm({ tournament, onSuccess }) {
         <label className="block text-xs font-semibold text-gray-600 mb-2">T-Shirt Size</label>
         <div className="flex gap-2">
           {['S', 'M', 'L', 'XL', 'XXL'].map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setValue('tshirt_size', s)}
-              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${
-                selectedSize === s
-                  ? 'border-amber-400 bg-amber-50 text-amber-700'
-                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
-              }`}
-            >
+            <button key={s} type="button" onClick={() => setValue('tshirt_size', s)}
+              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${selectedSize === s ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
               {s}
             </button>
           ))}
@@ -331,12 +360,10 @@ function ManualPlayerForm({ tournament, onSuccess }) {
         <p className="text-red-600 text-sm">⚠️ {mutation.error?.response?.data?.detail ?? 'Failed to add player'}</p>
       )}
 
-      <div className="flex gap-2 pt-1">
-        <button type="submit" disabled={mutation.isPending}
-          className="flex-1 py-2.5 bg-amber-400 text-slate-900 font-bold rounded-xl hover:bg-amber-300 transition-colors disabled:opacity-50 text-sm">
-          {mutation.isPending ? 'Adding…' : 'Add Player to Auction Pool'}
-        </button>
-      </div>
+      <button type="submit" disabled={mutation.isPending}
+        className="w-full py-2.5 bg-amber-400 text-slate-900 font-bold rounded-xl hover:bg-amber-300 transition-colors disabled:opacity-50 text-sm">
+        {mutation.isPending ? 'Adding…' : 'Add Player to Auction Pool'}
+      </button>
 
       <p className="text-xs text-gray-400 text-center">Player will be added as <strong>Approved</strong> and immediately eligible for auction.</p>
     </form>
