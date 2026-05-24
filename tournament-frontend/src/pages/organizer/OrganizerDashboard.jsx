@@ -53,7 +53,7 @@ function TournamentForm({ onSuccess, initial }) {
         registration_end_date: toLocalInput(initial.registration_end_date),
         auction_date: toLocalInput(initial.auction_date),
       }
-    : { registration_fee: 150, max_teams: 8, overs: 20, is_public: true };
+    : { registration_fee: 150, max_teams: 8, overs: 20, max_squad_size: 15, is_public: true };
 
   const { register, handleSubmit, formState: { errors } } = useForm({ defaultValues: defaults });
   const qc = useQueryClient();
@@ -62,7 +62,10 @@ function TournamentForm({ onSuccess, initial }) {
   const mutation = useMutation({
     mutationFn: (data) => {
       const clean = Object.fromEntries(
-        Object.entries(data).map(([k, v]) => [k, v === '' ? null : v])
+        Object.entries(data).map(([k, v]) => [
+          k,
+          v === '' || (typeof v === 'number' && isNaN(v)) ? null : v,
+        ])
       );
       return isEdit ? updateTournament(initial.id, clean) : createTournament(clean);
     },

@@ -31,6 +31,11 @@ class TournamentCreate(BaseModel):
     contact_phone: Optional[str] = None
     max_squad_size: int = 15
 
+    @field_validator("max_squad_size", mode="before")
+    @classmethod
+    def squad_size_default(cls, v):
+        return v if v is not None else 15
+
     @field_validator("name")
     @classmethod
     def name_not_empty(cls, v: str) -> str:
