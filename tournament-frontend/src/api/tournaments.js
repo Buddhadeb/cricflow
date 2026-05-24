@@ -48,6 +48,9 @@ export const createTournamentTeam = (tournamentId, data) =>
 export const assignTeamOwner = (tournamentId, teamId, ownerEmail) =>
   client.patch(`/tournaments/${tournamentId}/teams/${teamId}/owner`, { owner_email: ownerEmail }).then((r) => r.data);
 
+export const addPlayerManually = (tournamentId, data) =>
+  client.post(`/tournaments/${tournamentId}/players/manual`, data).then((r) => r.data);
+
 export const generateTournamentFixtures = (tournamentId, data) =>
   client.post(`/tournaments/${tournamentId}/matches/generate`, data).then((r) => r.data);
 

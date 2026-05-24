@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -16,6 +16,7 @@ from app.models.team import Team
 from app.models.tournament import Tournament
 from app.models.user import User
 from app.schemas.match import MatchResponse
+from app.schemas.player import PlayerResponse
 from app.schemas.tournament import TournamentCreate, TournamentResponse, TournamentUpdate
 
 
@@ -27,6 +28,18 @@ class TournamentTeamCreate(BaseModel):
 
 class TeamOwnerAssign(BaseModel):
     owner_email: str
+
+
+class ManualPlayerCreate(BaseModel):
+    name: str
+    age: int
+    dob: Optional[date] = None
+    address: str
+    phone: Optional[str] = None
+    player_type: Literal["batsman", "bowler", "all_rounder", "wicket_keeper"]
+    tshirt_size: Literal["S", "M", "L", "XL", "XXL"] = "M"
+    jersey_number: Optional[int] = None
+    base_price: Optional[Decimal] = None
 
 
 class TournamentMatchCreate(BaseModel):
@@ -182,6 +195,50 @@ async def list_tournament_players(
         }
         for p in players
     ]
+
+
+@router.post("/{tournament_id}/players/manual", response_model=PlayerResponse, status_code=201)
+async def add_player_manually(
+    tournament_id: uuid.UUID,
+    body: ManualPlayerCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Organizer manually registers a player from an offline form. Auto-approved, ready for auction."""
+    tournament = await db.get(Tournament, tournament_id)
+    if not tournament:
+        raise HTTPException(404, "Tournament not found")
+    if tournament.organizer_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(403, "Only the tournament organizer can add players manually")
+
+    name = body.name.strip()
+    if len(name) < 2:
+        raise HTTPException(400, "Name must be at least 2 characters")
+    if not (15 <= body.age <= 60):
+        raise HTTPException(400, "Age must be between 15 and 60")
+
+    base = body.base_price or tournament.player_base_price or Decimal("1000.00")
+
+    player = Player(
+        id=uuid.uuid4(),
+        user_id=None,
+        tournament_id=tournament_id,
+        name=name,
+        age=body.age,
+        dob=body.dob,
+        address=body.address.strip(),
+        phone=body.phone,
+        player_type=body.player_type,
+        tshirt_size=body.tshirt_size,
+        jersey_number=body.jersey_number,
+        base_price=base,
+        status="available",
+        is_approved=True,
+    )
+    db.add(player)
+    await db.commit()
+    await db.refresh(player)
+    return player
 
 
 @router.patch("/{tournament_id}/players/{player_id}/approve", status_code=200)

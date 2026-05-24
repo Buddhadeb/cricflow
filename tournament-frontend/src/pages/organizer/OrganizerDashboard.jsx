@@ -16,6 +16,7 @@ import {
   completeTournament,
   createTournamentTeam,
   assignTeamOwner,
+  addPlayerManually,
   generateTournamentFixtures,
   scheduleTournamentMatch,
 } from '../../api/tournaments';
@@ -199,8 +200,153 @@ function Field({ label, error, children }) {
   );
 }
 
+const PLAYER_TYPES_MANUAL = [
+  { value: 'batsman',       label: 'Batsman',     detail: 'Opening / Middle Order' },
+  { value: 'bowler',        label: 'Bowler',       detail: 'Fast / Medium / Spinner' },
+  { value: 'all_rounder',   label: 'All-Rounder',  detail: 'Batting / Bowling AR' },
+  { value: 'wicket_keeper', label: 'Keeper',       detail: 'Wicket Keeper' },
+];
+
+function ManualPlayerForm({ tournament, onSuccess }) {
+  const qc = useQueryClient();
+  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm({
+    defaultValues: { player_type: 'batsman', tshirt_size: 'M' },
+  });
+  const selectedType = watch('player_type');
+  const selectedSize = watch('tshirt_size');
+
+  const mutation = useMutation({
+    mutationFn: (data) => {
+      const payload = {
+        name: `${data.first_name.trim()} ${data.last_name.trim()}`,
+        age: Number(data.age),
+        dob: data.dob || null,
+        address: [data.address, data.ps ? `P.S. ${data.ps}` : ''].filter(Boolean).join(', '),
+        phone: data.phone || null,
+        player_type: data.player_type,
+        tshirt_size: data.tshirt_size,
+        jersey_number: data.jersey_number ? Number(data.jersey_number) : null,
+        base_price: data.base_price ? Number(data.base_price) : null,
+      };
+      return addPlayerManually(tournament.id, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tournament-players', tournament.id] });
+      reset({ player_type: 'batsman', tshirt_size: 'M' });
+      onSuccess();
+    },
+  });
+
+  const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400';
+
+  return (
+    <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
+      {/* Name row */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="First Name" error={errors.first_name?.message}>
+          <input {...register('first_name', { required: 'Required' })} placeholder="Suvendu" className={inputCls} />
+        </Field>
+        <Field label="Last Name" error={errors.last_name?.message}>
+          <input {...register('last_name', { required: 'Required' })} placeholder="Ghosh" className={inputCls} />
+        </Field>
+      </div>
+
+      {/* DOB + Age */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Date of Birth">
+          <input type="date" {...register('dob')} className={inputCls} />
+        </Field>
+        <Field label="Age" error={errors.age?.message}>
+          <input type="number" {...register('age', { required: 'Required', min: 15, max: 60 })} placeholder="30" min={15} max={60} className={inputCls} />
+        </Field>
+      </div>
+
+      {/* Address */}
+      <Field label="Residential Address" error={errors.address?.message}>
+        <input {...register('address', { required: 'Required' })} placeholder="Moshimpur" className={inputCls} />
+      </Field>
+      <Field label="P.S. / Area">
+        <input {...register('ps')} placeholder="Saktipur" className={inputCls} />
+      </Field>
+
+      {/* Phone */}
+      <Field label="Mobile No.">
+        <input type="tel" {...register('phone')} placeholder="9647383035" className={inputCls} />
+      </Field>
+
+      {/* Player type */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-2">Playing Role</label>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {PLAYER_TYPES_MANUAL.map((pt) => (
+            <button
+              key={pt.value}
+              type="button"
+              onClick={() => setValue('player_type', pt.value)}
+              className={`p-3 rounded-xl border-2 text-left transition-all ${
+                selectedType === pt.value
+                  ? 'border-amber-400 bg-amber-50'
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <p className={`text-sm font-bold ${selectedType === pt.value ? 'text-amber-700' : 'text-gray-700'}`}>{pt.label}</p>
+              <p className="text-xs text-gray-400 mt-0.5 leading-tight">{pt.detail}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* T-shirt size */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 mb-2">T-Shirt Size</label>
+        <div className="flex gap-2">
+          {['S', 'M', 'L', 'XL', 'XXL'].map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setValue('tshirt_size', s)}
+              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${
+                selectedSize === s
+                  ? 'border-amber-400 bg-amber-50 text-amber-700'
+                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Jersey + Base price */}
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Jersey Number (optional)">
+          <input type="number" {...register('jersey_number')} placeholder="e.g. 18" min={1} max={99} className={inputCls} />
+        </Field>
+        <Field label={`Base Price (₹)${tournament.player_base_price ? ` — default ₹${Number(tournament.player_base_price).toLocaleString('en-IN')}` : ''}`}>
+          <input type="number" {...register('base_price')} placeholder={tournament.player_base_price ? Number(tournament.player_base_price).toString() : '1000'} className={inputCls} />
+        </Field>
+      </div>
+
+      {mutation.isError && (
+        <p className="text-red-600 text-sm">⚠️ {mutation.error?.response?.data?.detail ?? 'Failed to add player'}</p>
+      )}
+
+      <div className="flex gap-2 pt-1">
+        <button type="submit" disabled={mutation.isPending}
+          className="flex-1 py-2.5 bg-amber-400 text-slate-900 font-bold rounded-xl hover:bg-amber-300 transition-colors disabled:opacity-50 text-sm">
+          {mutation.isPending ? 'Adding…' : 'Add Player to Auction Pool'}
+        </button>
+      </div>
+
+      <p className="text-xs text-gray-400 text-center">Player will be added as <strong>Approved</strong> and immediately eligible for auction.</p>
+    </form>
+  );
+}
+
 function PlayersTab({ tournament }) {
   const qc = useQueryClient();
+  const [showManualForm, setShowManualForm] = useState(false);
+
   const { data: players = [], isLoading } = useQuery({
     queryKey: ['tournament-players', tournament.id],
     queryFn: () => getTournamentPlayers(tournament.id),
@@ -217,9 +363,7 @@ function PlayersTab({ tournament }) {
 
   if (isLoading) return <div className="py-8 flex justify-center"><div className="w-8 h-8 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" /></div>;
 
-  // Tournament base price overrides individual player prices for the auction
   const effectiveBase = tournament.player_base_price ? Number(tournament.player_base_price) : null;
-
   const pending = players.filter((p) => p.status === 'pending');
   const approved = players.filter((p) => p.status !== 'pending');
 
@@ -227,9 +371,9 @@ function PlayersTab({ tournament }) {
     const display = effectiveBase ?? playerBase;
     return (
       <div className="text-right shrink-0">
-        <p className="text-sm font-bold text-gray-800">₹{display.toLocaleString('en-IN')}</p>
-        {effectiveBase && effectiveBase !== playerBase && (
-          <p className="text-xs text-gray-400 line-through">₹{playerBase.toLocaleString('en-IN')}</p>
+        <p className="text-sm font-bold text-gray-800">₹{Number(display).toLocaleString('en-IN')}</p>
+        {effectiveBase && effectiveBase !== Number(playerBase) && (
+          <p className="text-xs text-gray-400 line-through">₹{Number(playerBase).toLocaleString('en-IN')}</p>
         )}
       </div>
     );
@@ -237,19 +381,42 @@ function PlayersTab({ tournament }) {
 
   return (
     <div className="space-y-6">
+      {/* Manual entry button */}
+      {!showManualForm ? (
+        <button
+          onClick={() => setShowManualForm(true)}
+          className="w-full py-3 border-2 border-dashed border-amber-300 rounded-xl text-sm font-semibold text-amber-600 hover:border-amber-400 hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
+        >
+          <span className="text-lg">📋</span>
+          Add Player from Offline Form
+        </button>
+      ) : (
+        <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="font-bold text-gray-900">Add Player Manually</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Enter details from the offline registration form</p>
+            </div>
+            <button onClick={() => setShowManualForm(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+          </div>
+          <ManualPlayerForm tournament={tournament} onSuccess={() => setShowManualForm(false)} />
+        </div>
+      )}
+
       {effectiveBase && (
         <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700 font-medium">
           <span>ℹ️</span>
           <span>All players start at tournament base price <strong>₹{effectiveBase.toLocaleString('en-IN')}</strong>. Individual declared prices are shown struck-through.</span>
         </div>
       )}
+
       {pending.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold text-gray-700 mb-3">Pending Approval ({pending.length})</h3>
+          <h3 className="text-sm font-bold text-gray-700 mb-3">Pending Payment Approval ({pending.length})</h3>
           <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
             {pending.map((p) => (
               <div key={p.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-9 h-9 rounded-full bg-slate-900 flex items-center justify-center text-white font-bold text-xs">
+                <div className="w-9 h-9 rounded-full bg-slate-900 flex items-center justify-center text-white font-bold text-xs shrink-0">
                   {p.name[0]}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -265,7 +432,7 @@ function PlayersTab({ tournament }) {
                 <div className="flex gap-2">
                   <button onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending}
                     className="px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-colors">
-                    Approve Payment
+                    Approve
                   </button>
                   <button
                     onClick={() => { if (window.confirm(`Reject ${p.name}?`)) rejectMutation.mutate(p.id); }}
@@ -282,21 +449,36 @@ function PlayersTab({ tournament }) {
 
       {approved.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold text-gray-700 mb-3">Approved Players ({approved.length})</h3>
+          <h3 className="text-sm font-bold text-gray-700 mb-3">
+            Auction Pool — {approved.length} player{approved.length !== 1 ? 's' : ''}
+          </h3>
           <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
             {approved.map((p) => (
               <div key={p.id} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-xs">
-                  {p.name[0]}
-                </div>
+                {p.photo_url ? (
+                  <img src={p.photo_url} alt={p.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                    {p.name[0]}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900 text-sm">{p.name}</p>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${TYPE_COLORS[p.player_type] ?? 'bg-gray-100 text-gray-600'}`}>
-                    {p.player_type.replace('_', ' ')}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full capitalize ${TYPE_COLORS[p.player_type] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {p.player_type.replace('_', ' ')}
+                    </span>
+                    {!p.user_id && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-violet-50 text-violet-600">Offline</span>
+                    )}
+                  </div>
                 </div>
                 <BasePrice playerBase={p.base_price} />
-                <span className={`text-xs font-bold px-2 py-1 rounded-full ${p.status === 'available' ? 'bg-emerald-100 text-emerald-700' : p.status === 'sold' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                <span className={`text-xs font-bold px-2 py-1 rounded-full shrink-0 ${
+                  p.status === 'available' ? 'bg-emerald-100 text-emerald-700' :
+                  p.status === 'sold' ? 'bg-blue-100 text-blue-700' :
+                  'bg-gray-100 text-gray-500'
+                }`}>
                   {p.status}
                 </span>
               </div>
@@ -305,10 +487,10 @@ function PlayersTab({ tournament }) {
         </div>
       )}
 
-      {players.length === 0 && (
+      {players.length === 0 && !showManualForm && (
         <div className="text-center py-12 text-gray-400">
           <p className="text-4xl mb-3">🏏</p>
-          <p>No players registered yet</p>
+          <p>No players yet — add from offline forms or wait for online registrations</p>
         </div>
       )}
     </div>
