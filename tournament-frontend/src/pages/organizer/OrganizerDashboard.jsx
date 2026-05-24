@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
 import NavBar from '../../components/NavBar';
 import {
   getMyTournaments,
@@ -12,16 +11,11 @@ import {
   approvePayment,
   rejectPlayer,
   startAuction,
-  startLeague,
   completeTournament,
   createTournamentTeam,
   assignTeamOwner,
   addPlayerManually,
-  generateTournamentFixtures,
-  scheduleTournamentMatch,
 } from '../../api/tournaments';
-import { listMatches } from '../../api/matches';
-import { Link } from 'react-router-dom';
 
 const STATUS_CONFIG = {
   registration: { label: 'Registration',  color: 'bg-emerald-100 text-emerald-700' },
@@ -200,34 +194,69 @@ function Field({ label, error, children }) {
   );
 }
 
-const PLAYER_TYPES_MANUAL = [
-  { value: 'batsman',       label: 'Batsman',     detail: 'Opening / Middle Order' },
-  { value: 'bowler',        label: 'Bowler',       detail: 'Fast / Medium / Spinner' },
-  { value: 'all_rounder',   label: 'All-Rounder',  detail: 'Batting / Bowling AR' },
-  { value: 'wicket_keeper', label: 'Keeper',       detail: 'Wicket Keeper' },
+const PLAYING_ROLES = [
+  { value: 'opening_batsman',    label: 'Opening Batsmen',    col: 'left' },
+  { value: 'middle_order',       label: 'Middle Order Batsmen', col: 'right' },
+  { value: 'fast_bowler',        label: 'Fast Bowler',        col: 'left' },
+  { value: 'medium_fast_bowler', label: 'Medium Fast Bowler', col: 'right' },
+  { value: 'batting_all_rounder',label: 'Batting All Rounder',col: 'left' },
+  { value: 'bowling_all_rounder',label: 'Bowling All Rounder',col: 'right' },
+  { value: 'off_spinner',        label: 'Off Spinner',        col: 'left' },
+  { value: 'leg_spinner',        label: 'Leg Spinner',        col: 'right' },
 ];
+
+function derivePlayerType(isKeeper, role) {
+  if (isKeeper) return 'wicket_keeper';
+  if (['opening_batsman', 'middle_order'].includes(role)) return 'batsman';
+  if (['batting_all_rounder', 'bowling_all_rounder'].includes(role)) return 'all_rounder';
+  return 'bowler';
+}
+
+function FormBox({ checked, onClick }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`w-4 h-4 border-2 rounded-sm flex items-center justify-center shrink-0 transition-colors ${checked ? 'bg-[#1a2f5e] border-[#1a2f5e]' : 'border-gray-400 bg-white'}`}>
+      {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+      </svg>}
+    </button>
+  );
+}
+
+function FormLine({ label, children, labelW = 'w-40' }) {
+  return (
+    <div className="flex items-end gap-2">
+      <span className={`text-xs font-semibold text-gray-600 shrink-0 pb-0.5 ${labelW}`}>{label}</span>
+      <div className="flex-1 border-b border-gray-400">{children}</div>
+    </div>
+  );
+}
 
 function ManualPlayerForm({ tournament, onSuccess }) {
   const qc = useQueryClient();
   const photoRef = useRef(null);
   const [photoPreview, setPhotoPreview] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
+  const [battingHand, setBattingHand] = useState('right');
+  const [bowlingArm, setBowlingArm] = useState('right');
+  const [isKeeper, setIsKeeper] = useState(false);
+  const [playingRole, setPlayingRole] = useState('');
+  const [tshirtSize, setTshirtSize] = useState('M');
+  const [formError, setFormError] = useState('');
 
-  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm({
-    defaultValues: { player_type: 'batsman', tshirt_size: 'M' },
-  });
-  const selectedType = watch('player_type');
-  const selectedSize = watch('tshirt_size');
+  const { register, handleSubmit, reset, formState: { errors } } = useForm();
 
   const mutation = useMutation({
     mutationFn: (data) => {
+      if (!playingRole && !isKeeper) { setFormError('Please select a Playing Role'); return Promise.reject(); }
+      setFormError('');
       const fd = new FormData();
       fd.append('first_name', data.first_name.trim());
       fd.append('last_name', data.last_name.trim());
       fd.append('age', data.age);
       fd.append('address', data.address.trim());
-      fd.append('player_type', data.player_type);
-      fd.append('tshirt_size', data.tshirt_size);
+      fd.append('player_type', derivePlayerType(isKeeper, playingRole));
+      fd.append('tshirt_size', tshirtSize);
       if (data.dob) fd.append('dob', data.dob);
       if (data.ps) fd.append('ps', data.ps.trim());
       if (data.phone) fd.append('phone', data.phone.trim());
@@ -238,9 +267,10 @@ function ManualPlayerForm({ tournament, onSuccess }) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tournament-players', tournament.id] });
-      reset({ player_type: 'batsman', tshirt_size: 'M' });
-      setPhotoPreview(null);
-      setPhotoFile(null);
+      reset();
+      setPhotoPreview(null); setPhotoFile(null);
+      setBattingHand('right'); setBowlingArm('right');
+      setIsKeeper(false); setPlayingRole(''); setTshirtSize('M');
       onSuccess();
     },
   });
@@ -252,121 +282,232 @@ function ManualPlayerForm({ tournament, onSuccess }) {
     setPhotoPreview(URL.createObjectURL(f));
   };
 
-  const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400';
+  const lineInput = 'w-full bg-transparent text-sm text-gray-800 focus:outline-none pb-0.5 px-1';
 
   return (
-    <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
+    <div className="bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-200 max-w-2xl mx-auto">
 
-      {/* Photo upload */}
-      <div className="flex items-center gap-4">
-        <div
-          onClick={() => photoRef.current?.click()}
-          className="w-20 h-24 rounded-xl border-2 border-dashed border-gray-200 hover:border-amber-400 cursor-pointer flex items-center justify-center overflow-hidden transition-colors shrink-0 bg-gray-50"
-        >
-          {photoPreview ? (
-            <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
-          ) : (
-            <div className="text-center">
-              <svg className="w-6 h-6 text-gray-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <p className="text-xs text-gray-400 mt-1">Photo</p>
-            </div>
-          )}
+      {/* ── Header ── */}
+      <div className="bg-[#1a2f5e] px-6 py-4 text-center">
+        <div className="flex items-center justify-center gap-3 mb-1">
+          <span className="text-2xl">🏏</span>
+          <div>
+            <p className="text-amber-400 text-xs font-bold tracking-widest uppercase">Registration Form For Players</p>
+            <h2 className="text-white font-black text-xl uppercase tracking-wide leading-tight">
+              {tournament.name}
+            </h2>
+          </div>
+          <span className="text-2xl">🏏</span>
         </div>
-        <div>
-          <p className="text-xs font-semibold text-gray-600 mb-1">Player Photo</p>
-          <p className="text-xs text-gray-400 mb-2">Passport size photo from the form (optional)</p>
-          <button type="button" onClick={() => photoRef.current?.click()}
-            className="px-3 py-1.5 border border-gray-200 text-xs font-semibold text-gray-600 rounded-lg hover:border-amber-400 hover:text-amber-600 transition-colors">
-            {photoPreview ? 'Change Photo' : 'Upload Photo'}
+      </div>
+
+      <form onSubmit={handleSubmit((d) => mutation.mutate(d))}>
+        <div className="px-6 py-5 space-y-3">
+
+          {/* ── Name + Photo row ── */}
+          <div className="flex gap-4">
+            <div className="flex-1 space-y-3">
+              <FormLine label="First Name">
+                <input {...register('first_name', { required: true })}
+                  className={`${lineInput} ${errors.first_name ? 'placeholder-red-400' : ''}`}
+                  placeholder={errors.first_name ? 'Required' : ''} />
+              </FormLine>
+              <FormLine label="Last Name">
+                <input {...register('last_name', { required: true })}
+                  className={`${lineInput} ${errors.last_name ? 'placeholder-red-400' : ''}`}
+                  placeholder={errors.last_name ? 'Required' : ''} />
+              </FormLine>
+              <div className="flex gap-4">
+                <FormLine label="Date of Birth" labelW="w-28">
+                  <input type="date" {...register('dob')} className={lineInput} />
+                </FormLine>
+                <FormLine label="Age" labelW="w-8">
+                  <input type="number" {...register('age', { required: true, min: 15, max: 60 })}
+                    className={`${lineInput} w-16`} placeholder="—" min={15} max={60} />
+                </FormLine>
+              </div>
+            </div>
+
+            {/* Photo box */}
+            <div onClick={() => photoRef.current?.click()}
+              className="w-24 h-28 border-2 border-dashed border-gray-300 hover:border-[#1a2f5e] rounded cursor-pointer flex items-center justify-center overflow-hidden shrink-0 transition-colors bg-gray-50">
+              {photoPreview
+                ? <img src={photoPreview} alt="Photo" className="w-full h-full object-cover" />
+                : <div className="text-center p-2">
+                    <svg className="w-6 h-6 text-gray-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    </svg>
+                    <p className="text-[10px] text-gray-400 mt-1 leading-tight">Passport Photo</p>
+                  </div>
+              }
+            </div>
+            <input ref={photoRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={handlePhoto} />
+          </div>
+
+          <FormLine label="Residential Address">
+            <input {...register('address', { required: true })}
+              className={`${lineInput} ${errors.address ? 'placeholder-red-400' : ''}`}
+              placeholder={errors.address ? 'Required' : ''} />
+          </FormLine>
+          <div className="flex gap-4">
+            <FormLine label="P.S." labelW="w-8">
+              <input {...register('ps')} className={lineInput} />
+            </FormLine>
+            <FormLine label="Mobile No." labelW="w-20">
+              <input type="tel" {...register('phone')} className={lineInput} placeholder="—" />
+            </FormLine>
+          </div>
+        </div>
+
+        {/* ── Classification ── */}
+        <div className="mx-6 mb-4">
+          <div className="bg-[#1a2f5e] px-3 py-1 rounded-t">
+            <p className="text-white text-xs font-black uppercase tracking-wider">Classification:</p>
+          </div>
+          <div className="border border-[#1a2f5e] rounded-b px-4 py-3 space-y-2.5">
+            {/* Batting */}
+            <div className="flex items-center gap-6">
+              <span className="text-xs font-bold text-gray-700 w-24 shrink-0">a) Batting</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <FormBox checked={battingHand === 'right'} onClick={() => setBattingHand('right')} />
+                <span className="text-xs text-gray-600">Right Hand Bat</span>
+              </label>
+              <span className="text-gray-300">|</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <FormBox checked={battingHand === 'left'} onClick={() => setBattingHand('left')} />
+                <span className="text-xs text-gray-600">Left Hand Bat</span>
+              </label>
+            </div>
+            {/* Bowling */}
+            <div className="flex items-center gap-6">
+              <span className="text-xs font-bold text-gray-700 w-24 shrink-0">b) Bowling</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <FormBox checked={bowlingArm === 'right'} onClick={() => setBowlingArm('right')} />
+                <span className="text-xs text-gray-600">Right Arm</span>
+              </label>
+              <span className="text-gray-300">|</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <FormBox checked={bowlingArm === 'left'} onClick={() => setBowlingArm('left')} />
+                <span className="text-xs text-gray-600">Left Arm</span>
+              </label>
+            </div>
+            {/* Keeper */}
+            <div className="flex items-center gap-6">
+              <span className="text-xs font-bold text-gray-700 w-24 shrink-0">c) Wicket Keeper</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <FormBox checked={isKeeper} onClick={() => setIsKeeper(true)} />
+                <span className="text-xs text-gray-600">Yes</span>
+              </label>
+              <span className="text-gray-300">|</span>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <FormBox checked={!isKeeper} onClick={() => setIsKeeper(false)} />
+                <span className="text-xs text-gray-600">No</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Playing Role ── */}
+        <div className="mx-6 mb-4">
+          <div className="bg-[#1a2f5e] px-3 py-1 rounded-t">
+            <p className="text-white text-xs font-black uppercase tracking-wider">Playing Role:</p>
+          </div>
+          <div className="border border-[#1a2f5e] rounded-b px-4 py-3 grid grid-cols-2 gap-x-8 gap-y-2.5">
+            {PLAYING_ROLES.map((r) => (
+              <label key={r.value} className="flex items-center gap-2 cursor-pointer">
+                <FormBox
+                  checked={playingRole === r.value}
+                  onClick={() => { setPlayingRole(r.value); setIsKeeper(false); }}
+                />
+                <span className="text-xs text-gray-700">{r.label}</span>
+              </label>
+            ))}
+          </div>
+          {formError && <p className="text-red-500 text-xs mt-1">{formError}</p>}
+        </div>
+
+        {/* ── Achievements ── */}
+        <div className="px-6 mb-4">
+          <FormLine label="Achievements and representation if any" labelW="w-64">
+            <input {...register('achievements')} className={lineInput} placeholder="NIL" />
+          </FormLine>
+        </div>
+
+        {/* ── Extra fields (T-shirt, Jersey, Price) ── */}
+        <div className="mx-6 mb-4 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 space-y-3">
+          <div>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">T-Shirt Size</p>
+            <div className="flex gap-2">
+              {['S','M','L','XL','XXL'].map((s) => (
+                <button key={s} type="button" onClick={() => setTshirtSize(s)}
+                  className={`flex-1 py-1.5 rounded-lg border-2 text-xs font-black transition-all ${tshirtSize === s ? 'border-[#1a2f5e] bg-[#1a2f5e] text-white' : 'border-gray-200 text-gray-500'}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs font-bold text-gray-500 mb-1">Jersey Number</p>
+              <input type="number" {...register('jersey_number')} placeholder="e.g. 18" min={1} max={99}
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-gray-500 mb-1">
+                Base Price (₹){tournament.player_base_price ? ` — default ₹${Number(tournament.player_base_price).toLocaleString('en-IN')}` : ''}
+              </p>
+              <input type="number" {...register('base_price')}
+                placeholder={tournament.player_base_price ? Number(tournament.player_base_price).toString() : '1000'}
+                className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+            </div>
+          </div>
+        </div>
+
+        {/* ── Declarations ── */}
+        <div className="mx-6 mb-4">
+          <div className="bg-[#1a2f5e] px-3 py-1 rounded-t">
+            <p className="text-white text-xs font-black uppercase tracking-wider">Declarations:</p>
+          </div>
+          <div className="border border-[#1a2f5e] rounded-b px-4 py-2.5 space-y-1">
+            {[
+              `I am willing to participate in ${tournament.name}.`,
+              'I agree to obey the rules and regulations of the tournament and play with true sportsmen spirit.',
+              'I am also aware that if I violate the conditions, I am liable to deregistration.',
+              'The given information is true and legal.',
+            ].map((line, i) => (
+              <p key={i} className="text-xs text-gray-600">{i + 1}. {line}</p>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Date + Submit ── */}
+        <div className="px-6 pb-4 flex items-end gap-4">
+          <FormLine label="Date" labelW="w-10">
+            <input type="date" {...register('date')} defaultValue={new Date().toISOString().split('T')[0]}
+              className={lineInput} />
+          </FormLine>
+          <div className="flex-1" />
+        </div>
+
+        {mutation.isError && (
+          <p className="px-6 pb-2 text-red-600 text-sm">⚠️ {mutation.error?.response?.data?.detail ?? 'Failed to add player'}</p>
+        )}
+
+        <div className="px-6 pb-5">
+          <button type="submit" disabled={mutation.isPending}
+            className="w-full py-3 bg-[#1a2f5e] hover:bg-[#22397a] text-white font-black rounded-xl transition-colors disabled:opacity-50 text-sm tracking-wide">
+            {mutation.isPending ? 'Adding to Auction Pool…' : 'ADD PLAYER TO AUCTION POOL'}
           </button>
         </div>
-        <input ref={photoRef} type="file" accept="image/jpeg,image/png" className="hidden" onChange={handlePhoto} />
-      </div>
 
-      {/* Name row */}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="First Name" error={errors.first_name?.message}>
-          <input {...register('first_name', { required: 'Required' })} placeholder="Suvendu" className={inputCls} />
-        </Field>
-        <Field label="Last Name" error={errors.last_name?.message}>
-          <input {...register('last_name', { required: 'Required' })} placeholder="Ghosh" className={inputCls} />
-        </Field>
-      </div>
-
-      {/* DOB + Age */}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Date of Birth">
-          <input type="date" {...register('dob')} className={inputCls} />
-        </Field>
-        <Field label="Age" error={errors.age?.message}>
-          <input type="number" {...register('age', { required: 'Required', min: 15, max: 60 })} placeholder="30" min={15} max={60} className={inputCls} />
-        </Field>
-      </div>
-
-      {/* Address */}
-      <Field label="Residential Address" error={errors.address?.message}>
-        <input {...register('address', { required: 'Required' })} placeholder="Moshimpur" className={inputCls} />
-      </Field>
-      <Field label="P.S. / Area">
-        <input {...register('ps')} placeholder="Saktipur" className={inputCls} />
-      </Field>
-
-      {/* Phone */}
-      <Field label="Mobile No.">
-        <input type="tel" {...register('phone')} placeholder="9647383035" className={inputCls} />
-      </Field>
-
-      {/* Player type */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-2">Playing Role</label>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {PLAYER_TYPES_MANUAL.map((pt) => (
-            <button key={pt.value} type="button" onClick={() => setValue('player_type', pt.value)}
-              className={`p-3 rounded-xl border-2 text-left transition-all ${selectedType === pt.value ? 'border-amber-400 bg-amber-50' : 'border-gray-200 hover:border-gray-300'}`}>
-              <p className={`text-sm font-bold ${selectedType === pt.value ? 'text-amber-700' : 'text-gray-700'}`}>{pt.label}</p>
-              <p className="text-xs text-gray-400 mt-0.5 leading-tight">{pt.detail}</p>
-            </button>
-          ))}
+        {/* ── Footer ── */}
+        <div className="bg-[#1a2f5e] px-6 py-2 flex items-center justify-center gap-3">
+          <span className="text-amber-400 text-sm">🏏</span>
+          <p className="text-white text-xs font-bold tracking-widest">PLAY HARD • RESPECT ALL • WIN TOGETHER</p>
+          <span className="text-amber-400 text-sm">🏏</span>
         </div>
-      </div>
-
-      {/* T-shirt size */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 mb-2">T-Shirt Size</label>
-        <div className="flex gap-2">
-          {['S', 'M', 'L', 'XL', 'XXL'].map((s) => (
-            <button key={s} type="button" onClick={() => setValue('tshirt_size', s)}
-              className={`flex-1 py-2 rounded-xl border-2 text-sm font-bold transition-all ${selectedSize === s ? 'border-amber-400 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Jersey + Base price */}
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Jersey Number (optional)">
-          <input type="number" {...register('jersey_number')} placeholder="e.g. 18" min={1} max={99} className={inputCls} />
-        </Field>
-        <Field label={`Base Price (₹)${tournament.player_base_price ? ` — default ₹${Number(tournament.player_base_price).toLocaleString('en-IN')}` : ''}`}>
-          <input type="number" {...register('base_price')} placeholder={tournament.player_base_price ? Number(tournament.player_base_price).toString() : '1000'} className={inputCls} />
-        </Field>
-      </div>
-
-      {mutation.isError && (
-        <p className="text-red-600 text-sm">⚠️ {mutation.error?.response?.data?.detail ?? 'Failed to add player'}</p>
-      )}
-
-      <button type="submit" disabled={mutation.isPending}
-        className="w-full py-2.5 bg-amber-400 text-slate-900 font-bold rounded-xl hover:bg-amber-300 transition-colors disabled:opacity-50 text-sm">
-        {mutation.isPending ? 'Adding…' : 'Add Player to Auction Pool'}
-      </button>
-
-      <p className="text-xs text-gray-400 text-center">Player will be added as <strong>Approved</strong> and immediately eligible for auction.</p>
-    </form>
+      </form>
+    </div>
   );
 }
 
@@ -415,16 +556,16 @@ function PlayersTab({ tournament }) {
           className="w-full py-3 border-2 border-dashed border-amber-300 rounded-xl text-sm font-semibold text-amber-600 hover:border-amber-400 hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
         >
           <span className="text-lg">📋</span>
-          Add Player from Offline Form
+          Add Player from Offline Registration Form
         </button>
       ) : (
-        <div className="bg-white rounded-xl border border-amber-200 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className="font-bold text-gray-900">Add Player Manually</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Enter details from the offline registration form</p>
-            </div>
-            <button onClick={() => setShowManualForm(false)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs text-gray-400">Fill in the player's offline form details below</p>
+            <button onClick={() => setShowManualForm(false)}
+              className="text-xs font-semibold text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-3 py-1">
+              ✕ Cancel
+            </button>
           </div>
           <ManualPlayerForm tournament={tournament} onSuccess={() => setShowManualForm(false)} />
         </div>
@@ -983,18 +1124,11 @@ function TournamentDetail({ tournament }) {
             </button>
           )}
           {tournament.status === 'auction' && (
-            <>
-              <button
-                onClick={() => window.location.href = `/auction?tournament_id=${tournament.id}`}
-                className="px-4 py-2 bg-amber-400 text-slate-900 font-bold text-sm rounded-xl hover:bg-amber-300 transition-colors flex items-center gap-1.5">
-                🎙 Open Auction Room
-              </button>
-              <button onClick={() => confirmPhase('league', 'League')} disabled={phaseAction.isPending}
-                className="px-4 py-2 bg-blue-600 text-white font-bold text-sm rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2">
-                {phaseAction.isPending && <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
-                Start League Stage
-              </button>
-            </>
+            <button
+              onClick={() => window.location.href = `/auction?tournament_id=${tournament.id}`}
+              className="px-4 py-2 bg-amber-400 text-slate-900 font-bold text-sm rounded-xl hover:bg-amber-300 transition-colors flex items-center gap-1.5">
+              🎙 Open Auction Room
+            </button>
           )}
           {['league', 'playoffs'].includes(tournament.status) && (
             <button onClick={() => confirmPhase('complete', 'Completed')} disabled={phaseAction.isPending}
@@ -1007,9 +1141,9 @@ function TournamentDetail({ tournament }) {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — Matches hidden until scoring feature is ready */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6">
-        {['players', 'teams', 'matches'].map((t) => (
+        {['players', 'teams'].map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors capitalize ${tab === t ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             {t}
@@ -1019,7 +1153,6 @@ function TournamentDetail({ tournament }) {
 
       {tab === 'players' && <PlayersTab tournament={tournament} />}
       {tab === 'teams' && <TeamsTab tournament={tournament} />}
-      {tab === 'matches' && <MatchesTab tournament={tournament} />}
     </div>
   );
 }
