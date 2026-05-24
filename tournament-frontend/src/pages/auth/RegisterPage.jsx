@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,14 +12,37 @@ const schema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
+const ROLES = [
+  {
+    value: 'player',
+    label: 'Player',
+    icon: '🏏',
+    desc: 'Register for tournaments, get drafted in auctions, play matches',
+  },
+  {
+    value: 'team_owner',
+    label: 'Team Owner',
+    icon: '🏆',
+    desc: 'Own and manage a cricket team, bid in auctions, set your squad',
+  },
+  {
+    value: 'scorer',
+    label: 'Scorer',
+    icon: '📊',
+    desc: 'Score live matches ball by ball, track stats in real time',
+  },
+];
+
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const [role, setRole] = useState('player');
+
   const { register, handleSubmit, formState: { errors } } = useForm({
     resolver: zodResolver(schema),
   });
 
   const mutation = useMutation({
-    mutationFn: (data) => registerUser({ ...data, role: 'user' }),
+    mutationFn: (data) => registerUser({ ...data, role }),
     onSuccess: () => navigate('/login'),
   });
 
@@ -40,14 +64,36 @@ export default function RegisterPage() {
           </span>
         </div>
 
-        {/* Card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8 sm:p-10">
           <div className="mb-7">
             <h1 className="text-2xl font-black text-gray-900">Join CricFlow</h1>
-            <p className="text-gray-500 text-sm mt-1">One account — play, organize, score. Everything.</p>
+            <p className="text-gray-500 text-sm mt-1">Choose your role to get started</p>
           </div>
 
-          <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-5">
+          {/* Role selector */}
+          <div className="space-y-2 mb-6">
+            {ROLES.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => setRole(r.value)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-left transition-all ${
+                  role === r.value
+                    ? 'border-amber-400 bg-amber-50'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
+              >
+                <span className="text-2xl">{r.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className={`font-bold text-sm ${role === r.value ? 'text-amber-700' : 'text-gray-800'}`}>{r.label}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{r.desc}</p>
+                </div>
+                <div className={`w-4 h-4 rounded-full border-2 shrink-0 ${role === r.value ? 'border-amber-400 bg-amber-400' : 'border-gray-300'}`} />
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Full Name</label>
               <input
@@ -80,22 +126,9 @@ export default function RegisterPage() {
               {errors.password && <p className="text-red-500 text-xs mt-1.5 font-medium">{errors.password.message}</p>}
             </div>
 
-            {/* What you can do */}
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-              <p className="text-xs font-bold text-amber-800 mb-2">With one account you can:</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  '🏏 Play in tournaments',
-                  '🎯 Organize tournaments',
-                  '📊 Score live matches',
-                  '🏆 Manage a team',
-                  '📺 Watch live scores',
-                  '📈 View player stats',
-                ].map((item) => (
-                  <p key={item} className="text-xs text-amber-700">{item}</p>
-                ))}
-              </div>
-            </div>
+            <p className="text-xs text-gray-400">
+              Note: Anyone can organize a tournament from the "Organize" tab regardless of role.
+            </p>
 
             {mutation.isError && (
               <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
@@ -124,7 +157,7 @@ export default function RegisterPage() {
                   </svg>
                   Creating account…
                 </span>
-              ) : 'Create Account →'}
+              ) : `Create Account as ${ROLES.find(r => r.value === role)?.label} →`}
             </button>
           </form>
 

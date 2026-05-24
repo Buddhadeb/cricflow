@@ -124,10 +124,12 @@ function OverviewTab() {
   );
 }
 
-const ROLES = ['admin', 'user'];
+const ROLES = ['admin', 'player', 'team_owner', 'scorer'];
 const ROLE_COLOR = {
-  admin: 'bg-red-100 text-red-700',
-  user:  'bg-gray-100 text-gray-600',
+  admin:      'bg-red-100 text-red-700',
+  player:     'bg-blue-100 text-blue-700',
+  team_owner: 'bg-amber-100 text-amber-700',
+  scorer:     'bg-emerald-100 text-emerald-700',
 };
 
 function Tab({ label, active, onClick }) {

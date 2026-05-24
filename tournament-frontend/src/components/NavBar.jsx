@@ -24,7 +24,9 @@ function Avatar({ user, size = 'sm' }) {
 
 const ROLE_COLOR = {
   admin: 'text-rose-400',
-  user: 'text-slate-400',
+  player: 'text-blue-400',
+  team_owner: 'text-amber-400',
+  scorer: 'text-emerald-400',
 };
 
 const NAV_ICONS = {
@@ -33,7 +35,7 @@ const NAV_ICONS = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
     </svg>
   ),
-  'My Tournaments': (
+  'Organize': (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
     </svg>
@@ -84,7 +86,7 @@ export default function NavBar() {
 
   const links = [
     { to: '/tournaments', label: 'Tournaments' },
-    { to: '/organizer', label: 'My Tournaments' },
+    { to: '/organizer', label: 'Organize' },
     { to: '/my-team', label: 'My Team' },
     { to: '/challenges', label: 'Challenges' },
     ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin' }] : []),
