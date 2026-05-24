@@ -52,6 +52,10 @@ class PlayerResponse(BaseModel):
     is_approved: bool
     registered_at: datetime
     tournament_id: Optional[uuid.UUID] = None
+    # Enriched fields (populated for /mine endpoint)
+    tournament_name: Optional[str] = None
+    team_name: Optional[str] = None
+    registration_fee: Optional[int] = None
 
 
 class PlayerProfileUpdate(BaseModel):

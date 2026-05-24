@@ -1,13 +1,14 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.dependencies import get_current_user, get_db
 from app.models.player import Player
 from app.models.team import Team, TeamJoinRequest, TeamPlayer
+from app.models.tournament import Tournament
 from app.models.user import User
 from app.schemas.team import JoinRequestResponse, TeamCreate, TeamPlayerResponse, TeamResponse, TeamUpdate
 
@@ -251,6 +252,17 @@ async def approve_join_request(
     )
     if existing_tp.scalar_one_or_none():
         raise HTTPException(400, "Player is already assigned to a team")
+
+    # Enforce squad size limit from tournament settings
+    if team.tournament_id:
+        tournament = await db.get(Tournament, team.tournament_id)
+        if tournament and tournament.max_squad_size:
+            squad_count_res = await db.execute(
+                select(func.count()).where(TeamPlayer.team_id == team_id)
+            )
+            squad_count = squad_count_res.scalar_one()
+            if squad_count >= tournament.max_squad_size:
+                raise HTTPException(400, f"Squad is full ({tournament.max_squad_size} players max)")
 
     # Add to team
     db.add(TeamPlayer(team_id=team_id, player_id=req.player_id, sold_price=None))

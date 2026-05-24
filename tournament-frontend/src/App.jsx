@@ -26,10 +26,16 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
 
-// Just requires login — no role check
 function PrivateRoute({ children }) {
   const { token } = useAuthStore();
   if (!token) return <Navigate to="/login" replace />;
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { token, user } = useAuthStore();
+  if (!token) return <Navigate to="/login" replace />;
+  if (user?.role !== 'admin') return <Navigate to="/tournaments" replace />;
   return children;
 }
 
@@ -62,10 +68,10 @@ export default function App() {
 
           <Route path="/stats/players/:playerId"     element={<PrivateRoute><PlayerStatsPage /></PrivateRoute>} />
 
-          <Route path="/admin" element={<PrivateRoute><AdminPage /></PrivateRoute>} />
+          <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
 
-          <Route path="/tournaments"     element={<PrivateRoute><TournamentsPage /></PrivateRoute>} />
-          <Route path="/tournaments/:id" element={<PrivateRoute><TournamentDetailPage /></PrivateRoute>} />
+          <Route path="/tournaments"     element={<TournamentsPage />} />
+          <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
           <Route path="/organizer"       element={<PrivateRoute><OrganizerDashboard /></PrivateRoute>} />
           <Route path="/profile"         element={<PrivateRoute><EditProfilePage /></PrivateRoute>} />
           <Route path="/my-team"         element={<PrivateRoute><TeamCaptainPage /></PrivateRoute>} />

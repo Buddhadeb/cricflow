@@ -5,6 +5,21 @@ import { updateProfile, getMe } from '../../api/auth';
 import { getMyPlayers, updateMyPlayer, registerPlayer } from '../../api/players';
 import { useAuthStore } from '../../store/authStore';
 import NavBar from '../../components/NavBar';
+import client from '../../api/client';
+import { Link } from 'react-router-dom';
+
+const ROLE_OPTIONS = [
+  { value: 'player',     label: 'Player',     icon: '🏏', desc: 'Play in tournaments & auctions' },
+  { value: 'team_owner', label: 'Team Owner', icon: '🏆', desc: 'Own and manage a cricket team' },
+  { value: 'scorer',     label: 'Scorer',     icon: '📊', desc: 'Score live matches ball by ball' },
+];
+
+const STATUS_CONFIG = {
+  pending:   { label: 'Pending Approval', color: 'text-amber-400',  bg: 'bg-amber-400/10  border-amber-400/30' },
+  available: { label: 'Approved',         color: 'text-emerald-400', bg: 'bg-emerald-400/10 border-emerald-400/30' },
+  sold:      { label: 'In a Team',        color: 'text-blue-400',    bg: 'bg-blue-400/10    border-blue-400/30' },
+  unsold:    { label: 'Unsold',           color: 'text-slate-400',   bg: 'bg-slate-700      border-slate-600' },
+};
 
 const PLAYER_TYPES = [
   { value: 'batsman',       label: 'Batsman',     icon: '🏏' },
@@ -46,6 +61,7 @@ export default function EditProfilePage() {
   const [name, setName] = useState(user?.name ?? '');
   const [preview, setPreview] = useState(user?.avatar_url ?? null);
   const [avatarFile, setAvatarFile] = useState(null);
+  const [selectedRole, setSelectedRole] = useState(user?.role ?? 'player');
 
   // ── Player profile state ──
   const [pType, setPType] = useState('batsman');
@@ -122,6 +138,16 @@ export default function EditProfilePage() {
       qc.invalidateQueries({ queryKey: ['my-players'] });
     },
     onError: (e) => setPlayerError(e?.response?.data?.detail ?? e?.message ?? 'Failed to create profile'),
+  });
+
+  // ── Role change ──
+  const roleMut = useMutation({
+    mutationFn: (role) => client.patch('/auth/me/role', { role }).then((r) => r.data),
+    onSuccess: async (updated) => {
+      const { data: fresh } = await getMe();
+      setAuth(token, fresh);
+      qc.invalidateQueries({ queryKey: ['me'] });
+    },
   });
 
   // ── Player update ──
@@ -251,6 +277,79 @@ export default function EditProfilePage() {
             {accountMut.isPending ? 'Saving…' : 'Save Account'}
           </button>
         </div>
+
+        {/* ── Role section ── */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h2 className="text-base font-bold text-white mb-1">My Role</h2>
+          <p className="text-xs text-slate-500 mb-4">How you primarily use CricFlow</p>
+
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {ROLE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setSelectedRole(opt.value)}
+                className={`p-3 rounded-xl border-2 text-center transition-all ${
+                  selectedRole === opt.value
+                    ? 'border-amber-400 bg-amber-400/10'
+                    : 'border-slate-700 bg-slate-800 hover:border-slate-600'
+                }`}
+              >
+                <span className="text-2xl block">{opt.icon}</span>
+                <span className={`text-xs font-bold mt-1 block ${selectedRole === opt.value ? 'text-amber-300' : 'text-slate-400'}`}>
+                  {opt.label}
+                </span>
+                <span className="text-[10px] text-slate-500 mt-0.5 block leading-tight">{opt.desc}</span>
+              </button>
+            ))}
+          </div>
+
+          {roleMut.isSuccess && <p className="text-emerald-400 text-xs mb-2 font-medium">✓ Role updated</p>}
+          {roleMut.isError && <p className="text-red-400 text-xs mb-2">{roleMut.error?.response?.data?.detail ?? 'Failed to update role'}</p>}
+
+          <button
+            onClick={() => roleMut.mutate(selectedRole)}
+            disabled={roleMut.isPending || selectedRole === user?.role}
+            className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-900 font-bold text-sm transition-all"
+          >
+            {roleMut.isPending ? 'Saving…' : selectedRole === user?.role ? 'Current Role' : `Switch to ${ROLE_OPTIONS.find(r => r.value === selectedRole)?.label}`}
+          </button>
+        </div>
+
+        {/* ── Tournament registrations ── */}
+        {myPlayers.filter((p) => p.tournament_id).length > 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+            <h2 className="text-base font-bold text-white mb-1">Tournament Registrations</h2>
+            <p className="text-xs text-slate-500 mb-4">Your status in each tournament</p>
+            <div className="space-y-3">
+              {myPlayers.filter((p) => p.tournament_id).map((p) => {
+                const cfg = STATUS_CONFIG[p.status] ?? STATUS_CONFIG.pending;
+                return (
+                  <div key={p.id} className={`p-4 rounded-xl border ${cfg.bg} flex items-center justify-between gap-3`}>
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold text-sm truncate">{p.tournament_name ?? 'Tournament'}</p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</span>
+                        {p.team_name && (
+                          <span className="text-xs text-slate-400">· {p.team_name}</span>
+                        )}
+                      </div>
+                    </div>
+                    {(p.status === 'pending') && (
+                      <Link
+                        to="/payment"
+                        state={{ player_id: p.id, tournament_id: p.tournament_id, fee: p.registration_fee }}
+                        className="shrink-0 text-xs font-bold px-3 py-1.5 bg-amber-400 text-slate-900 rounded-lg hover:bg-amber-300 transition-colors"
+                      >
+                        Pay Fee
+                      </Link>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* ── Player profile section ── */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">

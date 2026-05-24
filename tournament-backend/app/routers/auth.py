@@ -114,6 +114,23 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+@router.patch("/me/role", response_model=UserResponse)
+async def update_my_role(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from typing import Literal
+    valid = {"player", "team_owner", "scorer"}
+    role = body.get("role")
+    if role not in valid:
+        raise HTTPException(status_code=400, detail=f"Role must be one of: {', '.join(sorted(valid))}")
+    current_user.role = role
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+
 @router.put("/me", response_model=UserResponse)
 async def update_me(
     name: str | None = Form(None),

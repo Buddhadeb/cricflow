@@ -38,6 +38,9 @@ class Tournament(Base):
     player_upper_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     team_budget_limit: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    upi_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    max_squad_size: Mapped[int] = mapped_column(Integer, nullable=False, default=15)
     created_at: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     organizer = relationship("User", foreign_keys=[organizer_id])

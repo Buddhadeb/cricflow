@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db, require_admin
 from app.models.player import Player
+from app.models.team import Team, TeamPlayer
+from app.models.tournament import Tournament
 from app.models.user import User
 from app.schemas.player import PlayerProfileUpdate, PlayerResponse
 from app.services import player_service
@@ -51,7 +53,26 @@ async def get_my_players(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(select(Player).where(Player.user_id == current_user.id))
-    return result.scalars().all()
+    players = result.scalars().all()
+
+    enriched = []
+    for p in players:
+        item = PlayerResponse.model_validate(p)
+        if p.tournament_id:
+            t = await db.get(Tournament, p.tournament_id)
+            if t:
+                item.tournament_name = t.name
+                item.registration_fee = t.registration_fee
+        tp_res = await db.execute(
+            select(TeamPlayer).where(TeamPlayer.player_id == p.id)
+        )
+        tp = tp_res.scalar_one_or_none()
+        if tp:
+            team = await db.get(Team, tp.team_id)
+            if team:
+                item.team_name = team.name
+        enriched.append(item)
+    return enriched
 
 
 @router.patch("/mine", response_model=PlayerResponse)

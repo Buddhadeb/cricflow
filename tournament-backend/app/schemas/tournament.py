@@ -27,6 +27,9 @@ class TournamentCreate(BaseModel):
     player_upper_price: Optional[Decimal] = None
     team_budget_limit: Optional[Decimal] = None
     is_public: bool = True
+    upi_id: Optional[str] = None
+    contact_phone: Optional[str] = None
+    max_squad_size: int = 15
 
     @field_validator("name")
     @classmethod
@@ -72,6 +75,9 @@ class TournamentUpdate(BaseModel):
     player_upper_price: Optional[Decimal] = None
     team_budget_limit: Optional[Decimal] = None
     is_public: Optional[bool] = None
+    upi_id: Optional[str] = None
+    contact_phone: Optional[str] = None
+    max_squad_size: Optional[int] = None
     status: Optional[Literal["registration", "auction", "league", "playoffs", "completed"]] = None
 
 
@@ -97,6 +103,9 @@ class TournamentResponse(BaseModel):
     player_upper_price: Optional[Decimal]
     team_budget_limit: Optional[Decimal]
     is_public: bool
+    upi_id: Optional[str]
+    contact_phone: Optional[str]
+    max_squad_size: int
     created_at: datetime
     # Aggregated counts (populated by specific queries)
     player_count: int = 0

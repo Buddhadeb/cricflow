@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
 import client from '../../api/client';
 
@@ -8,7 +9,14 @@ export default function PaymentPage() {
   const { state } = useLocation();
   const user = useAuthStore((s) => s.user);
   const player_id = state?.player_id;
+  const tournament_id = state?.tournament_id ?? null;
   const stateFee = state?.fee ?? null;
+
+  const { data: tournament } = useQuery({
+    queryKey: ['tournament', tournament_id],
+    queryFn: () => client.get(`/tournaments/${tournament_id}`).then((r) => r.data),
+    enabled: !!tournament_id,
+  });
 
   const [status, setStatus] = useState('idle'); // idle | loading | submitted | error
   const [fee, setFee] = useState(stateFee);
@@ -116,12 +124,31 @@ export default function PaymentPage() {
                 </div>
               </div>
 
+              {/* Organizer contact */}
+              {(tournament?.upi_id || tournament?.contact_phone) && (
+                <div className="p-4 bg-slate-700/50 rounded-xl space-y-2">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Pay to Organizer</p>
+                  {tournament.upi_id && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 text-sm">UPI ID</span>
+                      <span className="text-amber-400 font-bold text-sm font-mono">{tournament.upi_id}</span>
+                    </div>
+                  )}
+                  {tournament.contact_phone && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 text-sm">WhatsApp / Call</span>
+                      <a href={`tel:${tournament.contact_phone}`} className="text-amber-400 font-bold text-sm">{tournament.contact_phone}</a>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Steps */}
               <div className="space-y-3">
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">How to complete payment</p>
                 {[
-                  { step: '1', text: 'Contact the tournament organizer via phone, WhatsApp, or in person.' },
-                  { step: '2', text: `Pay ₹${fee ?? '—'} via UPI, cash, or bank transfer as instructed by the organizer.` },
+                  { step: '1', text: tournament?.upi_id ? `Send ₹${fee ?? '—'} to UPI ID: ${tournament.upi_id}` : 'Contact the tournament organizer via phone, WhatsApp, or in person.' },
+                  { step: '2', text: tournament?.contact_phone ? `Message the organizer on ${tournament.contact_phone} with your name and payment screenshot.` : `Pay ₹${fee ?? '—'} via UPI, cash, or bank transfer as instructed by the organizer.` },
                   { step: '3', text: 'Once the organizer confirms receipt, they will approve your registration.' },
                   { step: '4', text: 'You will appear as an approved player and be eligible for the auction.' },
                 ].map(({ step, text }) => (

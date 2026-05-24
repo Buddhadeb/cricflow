@@ -147,6 +147,25 @@ function TournamentForm({ onSuccess, initial }) {
         <p className="text-xs text-gray-400 mt-1.5">Base price = minimum starting bid per player. Upper price = max a player can be sold for. Budget limit = max total spend per team.</p>
       </div>
 
+      {/* Payment contact */}
+      <div>
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Payment & Contact</p>
+        <p className="text-xs text-gray-400 mb-3">Players will see this on the payment page so they know where to pay you.</p>
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Your UPI ID">
+            <input {...register('upi_id')} placeholder="yourname@upi" className={inputCls} />
+          </Field>
+          <Field label="Contact Phone">
+            <input {...register('contact_phone')} placeholder="+91 98765 43210" className={inputCls} />
+          </Field>
+        </div>
+      </div>
+
+      {/* Squad size */}
+      <Field label="Max Squad Size per Team">
+        <input type="number" {...register('max_squad_size', { valueAsNumber: true })} placeholder="15" min={11} max={25} className={inputCls} />
+      </Field>
+
       <div className="flex items-center gap-2 pt-1">
         <input type="checkbox" id="is_public" {...register('is_public')} className="accent-amber-500" />
         <label htmlFor="is_public" className="text-sm text-gray-700">Make this tournament public</label>
