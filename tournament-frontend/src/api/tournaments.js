@@ -24,6 +24,9 @@ export const getTournamentPlayers = (id, status) =>
 export const getTournamentTeams = (id) =>
   client.get(`/tournaments/${id}/teams`).then((r) => r.data);
 
+export const approvePayment = (playerId) =>
+  client.post(`/payments/approve/${playerId}`).then((r) => r.data);
+
 export const approvePlayer = (tournamentId, playerId) =>
   client.patch(`/tournaments/${tournamentId}/players/${playerId}/approve`).then((r) => r.data);
 

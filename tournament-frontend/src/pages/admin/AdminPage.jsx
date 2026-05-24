@@ -12,7 +12,7 @@ const getAdminStats = () => client.get('/admin/stats').then((r) => r.data);
 const getPlayers = (params = {}) =>
   client.get('/players', { params }).then((r) => r.data);
 
-const approvePlayer = (id) => client.patch(`/players/${id}/approve`).then((r) => r.data);
+const approvePlayer = (id) => client.post(`/payments/approve/${id}`).then((r) => r.data);
 const rejectPlayer = (id) => client.patch(`/players/${id}/reject`).then((r) => r.data);
 
 const getUsers = () => client.get('/admin/users').then((r) => r.data);
@@ -206,7 +206,7 @@ function PlayersTab() {
                     disabled={approveMut.isPending}
                     className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50"
                   >
-                    Approve
+                    Approve Payment
                   </button>
                   <button
                     onClick={() => rejectMut.mutate(p.id)}

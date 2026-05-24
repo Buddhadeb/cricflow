@@ -4,15 +4,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db, require_admin
+from app.dependencies import get_current_user, get_db
 from app.models.payment import Payment
 from app.models.player import Player
+from app.models.tournament import Tournament
 from app.models.user import User
 from app.schemas.payment import (
     CreateOrderRequest,
     CreateOrderResponse,
     PaymentResponse,
-    VerifyPaymentRequest,
 )
 from app.services import payment_service
 
@@ -25,7 +25,6 @@ async def create_order(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify the player belongs to the requesting user
     player = await db.get(Player, body.player_id)
     if not player:
         raise HTTPException(404, "Player not found")
@@ -33,43 +32,34 @@ async def create_order(
         raise HTTPException(403, "You can only create orders for your own player registration")
     payment = await payment_service.create_order(body.player_id, db)
     return CreateOrderResponse(
-        razorpay_order_id=payment.razorpay_order_id,
-        amount=int(payment.amount * 100),
-        currency=payment.currency,
         payment_id=payment.id,
+        amount=int(payment.amount),
+        currency=payment.currency,
     )
 
 
-@router.post("/verify", response_model=PaymentResponse)
-async def verify_payment(
-    body: VerifyPaymentRequest,
+@router.post("/approve/{player_id}", response_model=PaymentResponse)
+async def approve_payment(
+    player_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Resolve player from the order to verify ownership
-    result = await db.execute(
-        select(Payment).where(Payment.razorpay_order_id == body.razorpay_order_id)
-    )
-    payment = result.scalar_one_or_none()
-    if payment:
-        player = await db.get(Player, payment.player_id)
-        if player and current_user.role != "admin" and player.user_id != current_user.id:
-            raise HTTPException(403, "You can only verify your own payments")
-    return await payment_service.verify_payment(
-        body.razorpay_order_id,
-        body.razorpay_payment_id,
-        body.razorpay_signature,
-        db,
-    )
-
-
-@router.post("/mock-complete/{player_id}", response_model=PaymentResponse)
-async def mock_complete(
-    player_id: uuid.UUID,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    return await payment_service.mock_complete(player_id, db)
+    if current_user.role == "admin":
+        pass  # admin can approve anyone
+    else:
+        # Must be the tournament organizer for this player
+        player = await db.get(Player, player_id)
+        if not player:
+            raise HTTPException(404, "Player not found")
+        if not player.tournament_id:
+            raise HTTPException(403, "Only admins can approve standalone player payments")
+        result = await db.execute(
+            select(Tournament).where(Tournament.id == player.tournament_id)
+        )
+        tournament = result.scalar_one_or_none()
+        if not tournament or tournament.organizer_id != current_user.id:
+            raise HTTPException(403, "Only the tournament organizer or admin can approve payments")
+    return await payment_service.approve_payment(player_id, db)
 
 
 @router.get("/status/{player_id}", response_model=PaymentResponse)

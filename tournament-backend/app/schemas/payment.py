@@ -13,16 +13,9 @@ class CreateOrderRequest(BaseModel):
 
 
 class CreateOrderResponse(BaseModel):
-    razorpay_order_id: str
+    payment_id: uuid.UUID
     amount: int
     currency: str
-    payment_id: uuid.UUID
-
-
-class VerifyPaymentRequest(BaseModel):
-    razorpay_order_id: str
-    razorpay_payment_id: str
-    razorpay_signature: str
 
 
 class PaymentResponse(BaseModel):

@@ -9,7 +9,7 @@ import {
   updateTournament,
   getTournamentPlayers,
   getTournamentTeams,
-  approvePlayer,
+  approvePayment,
   rejectPlayer,
   startAuction,
   startLeague,
@@ -185,7 +185,7 @@ function PlayersTab({ tournament }) {
   });
 
   const approveMutation = useMutation({
-    mutationFn: (pid) => approvePlayer(tournament.id, pid),
+    mutationFn: (pid) => approvePayment(pid),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tournament-players', tournament.id] }),
   });
   const rejectMutation = useMutation({
@@ -236,11 +236,14 @@ function PlayersTab({ tournament }) {
                     {p.player_type.replace('_', ' ')}
                   </span>
                 </div>
-                <BasePrice playerBase={p.base_price} />
+                <div className="text-right shrink-0">
+                  <p className="text-xs text-gray-400">Fee</p>
+                  <p className="text-sm font-bold text-amber-600">₹{Number(tournament.registration_fee).toLocaleString('en-IN')}</p>
+                </div>
                 <div className="flex gap-2">
                   <button onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending}
                     className="px-3 py-1 bg-emerald-500 text-white text-xs font-bold rounded-lg hover:bg-emerald-600 transition-colors">
-                    Approve
+                    Approve Payment
                   </button>
                   <button
                     onClick={() => { if (window.confirm(`Reject ${p.name}?`)) rejectMutation.mutate(p.id); }}
