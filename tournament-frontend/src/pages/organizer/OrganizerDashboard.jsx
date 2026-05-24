@@ -550,24 +550,33 @@ function PlayersTab({ tournament }) {
   return (
     <div className="space-y-6">
       {/* Manual entry button */}
-      {!showManualForm ? (
-        <button
-          onClick={() => setShowManualForm(true)}
-          className="w-full py-3 border-2 border-dashed border-amber-300 rounded-xl text-sm font-semibold text-amber-600 hover:border-amber-400 hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
-        >
-          <span className="text-lg">📋</span>
-          Add Player from Offline Registration Form
-        </button>
-      ) : (
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs text-gray-400">Fill in the player's offline form details below</p>
-            <button onClick={() => setShowManualForm(false)}
-              className="text-xs font-semibold text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-3 py-1">
-              ✕ Cancel
+      <button
+        onClick={() => setShowManualForm(true)}
+        className="w-full py-3 border-2 border-dashed border-amber-300 rounded-xl text-sm font-semibold text-amber-600 hover:border-amber-400 hover:bg-amber-50 transition-colors flex items-center justify-center gap-2"
+      >
+        <span className="text-lg">📋</span>
+        Add Player from Offline Registration Form
+      </button>
+
+      {/* ── Modal ── */}
+      {showManualForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowManualForm(false)}
+          />
+          {/* Sheet */}
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl">
+            {/* Close button */}
+            <button
+              onClick={() => setShowManualForm(false)}
+              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white font-bold text-sm transition-colors"
+            >
+              ✕
             </button>
+            <ManualPlayerForm tournament={tournament} onSuccess={() => setShowManualForm(false)} />
           </div>
-          <ManualPlayerForm tournament={tournament} onSuccess={() => setShowManualForm(false)} />
         </div>
       )}
 
